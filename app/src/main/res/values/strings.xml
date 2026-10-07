@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CR Elixir Tracker</string>
+    <string name="service_label">CR Elixir Tracker (оверлей)</string>
+    <string name="service_description">Показує трекер еліксиру, колоди та циклу суперника лише поверх Clash Royale. Сервіс бачить тільки назву застосунку на екрані, вміст екрана не читається.</string>
+    <string name="status_on">✅ Сервіс увімкнено. Запусти Clash Royale — оверлей з\'явиться автоматично.</string>
+    <string name="status_off">❌ Сервіс вимкнено. Виконай кроки нижче.</string>
+    <string name="game_missing">Clash Royale не встановлено.</string>
+    <string name="setup_help">1. (Android 13+, APK не з Play Store) Натисни «Інформація про застосунок» → ⋮ (вгорі праворуч) → «Дозволити обмежені налаштування».\n2. Натисни «Спеціальні можливості» → «Встановлені застосунки» → CR Elixir Tracker → увімкни.\n3. Запусти Clash Royale.</string>
+    <string name="btn_restricted">Інформація про застосунок</string>
+    <string name="btn_accessibility">Спеціальні можливості</string>
+    <string name="btn_launch_game">Запустити Clash Royale</string>
+    <string name="usage_help">Як користуватись у бою:\n• ▶ — натисни на старті бою (таймер 3:00). Еліксир стартує з 5.\n• Коли суперник грає карту: тапни її слот у колоді, або «+ карта» / «?» → вкладка з вартістю → карта.\n• Слоти: зелений ✓ — карта в руці; жовтий 1 — наступна прийде в руку; сірий 2-4 — черга.\n• Рядок «Далі» — порядок, у якому карти повернуться в руку.\n• Тап по таймеру — режим еліксиру: авто / x1 / x2 / x3 (! = ручний).\n• ⚡ — здібність чемпіона. +1/−1 — корекція (Elixir Collector тощо).\n• ↶ — скасувати останню дію. ⟲ (утримання) — новий бій. – — згорнути, ⠿ — перетягнути.\n• Якщо суперник зіграв дорожчу карту, ніж є за трекером, еліксир обнулюється — так лічильник сам калібрується.</string>
+</resources>
