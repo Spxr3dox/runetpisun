@@ -1,5 +1,7 @@
 package com.runetpisun.croverlay;
 
+import java.util.List;
+
 /** Plain-JVM checks for Tracker (run by tools/build.sh, no JUnit needed). */
 public final class TrackerTest {
     private static int failures;
@@ -92,6 +94,81 @@ public final class TrackerTest {
         ch.useAbility(aq, 0);
         check(near(ch.getElixir(), 0.0), "5 - 5 - 1 clamps to 0");
         check(ch.getPlayCount() == 1, "ability is not a play");
+
+        // Leak: sitting at 10 wastes elixir.
+        Tracker l = new Tracker();
+        l.start(0);
+        l.tick(14_000 + 5_600);
+        check(near(l.getLeaked(), 2.0), "leaked 2 after 5.6s at cap: " + l.getLeaked());
+
+        // Clock sync: battle started 2.8s earlier than tapped -> +1 elixir.
+        Tracker s = new Tracker();
+        s.start(0);
+        s.shiftClock(2_800, 0);
+        check(near(s.getElixir(), 6.0) && s.getElapsedMs() == 2_800, "shiftClock +2.8s");
+        s.shiftClock(-2_800, 0);
+        check(near(s.getElixir(), 5.0) && s.getElapsedMs() == 0, "shiftClock back");
+
+        // Elixir Collector: 1 per 9s after 1s deploy, 7 ticks in 65s, +1 on death.
+        Tracker p = new Tracker();
+        p.start(0);
+        p.tick(2_800); // 6.0
+        p.play(Card.byId("Elixir Collector"), 2_800); // 0.0
+        check(p.hasActivePump(), "pump active");
+        p.pause(2_800);
+        p.cycleMultiplier(); // irrelevant while paused; restore auto below
+        p.cycleMultiplier();
+        p.cycleMultiplier();
+        p.cycleMultiplier();
+        p.start(2_800);
+        p.adjust(-10, 2_800);
+        p.tick(2_800 + 10_000); // regen 10s = 3.571 + pump 1
+        check(near(p.getElixir(), 10_000 / 2_800.0 + 1), "pump first elixir after 10s: " + p.getElixir());
+        p.destroyPump(2_800 + 10_000);
+        check(!p.hasActivePump() && near(p.getElixir(), 10_000 / 2_800.0 + 2), "pump death +1");
+        p.undo(2_800 + 10_000); // undo adjust(-10)
+        p.undo(2_800 + 10_000); // undo pump play removes its 2 elixir
+        check(!p.hasActivePump(), "undo removes pump");
+
+        // Stats + insights on the bundled data.
+        try {
+            Stats st = Stats.parse(new java.io.FileReader(args.length > 0 ? args[0] : "app/src/main/assets/stats.tsv"));
+            Stats.Spell fb = st.spell(fireball);
+            check(fb != null && fb.totalDamage(11) == 689, "fireball lvl11 = 689");
+            check(fb.towerDamage(11) == 207, "fireball tower lvl11 = 207: " + fb.towerDamage(11));
+            Stats.Unit musk = st.units(Card.byId("Musketeer")).get(0);
+            check(musk.hp(11) == 720, "musketeer lvl11 = 720");
+            check(fb.hpLeft(11, musk, 11) == 31, "fireball leaves musketeer at 31");
+            check(fb.hpLeft(12, musk, 11) <= 0, "lvl12 fireball kills lvl11 musketeer");
+            Stats.Unit goblin = st.units(Card.byId("Goblins")).get(0);
+            check(st.spell(log).hpLeft(11, goblin, 11) <= 0, "log kills goblins");
+            Stats.Unit guard = st.units(Card.byId("Guards")).get(0);
+            check(guard.shield(11) > 0 && st.spell(log).hpLeft(16, guard, 11) > 0, "shield absorbs the log");
+            check(st.spell(Card.byId("Arrows")).hpLeft(11, guard, 11) <= 0, "arrows (3 waves) kill guards");
+
+            Tracker it = new Tracker();
+            it.start(0);
+            it.play(Card.byId("Goblin Barrel"), 0);
+            it.play(fireball, 0);
+            List<Card> mine = new java.util.ArrayList<>();
+            mine.add(log);
+            mine.add(Card.byId("Musketeer"));
+            Insights in = new Insights(it, st, mine, 11, 11);
+            List<String> lines = in.lines();
+            check(lines.size() == 2, "2 insight lines (last play is a spell): " + lines);
+            check(lines.get(0).contains("через 3") && lines.get(0).contains("Log✔"), "barrel line: " + lines.get(0));
+            check(lines.get(1).contains("Musket(31)"), "fireball line: " + lines.get(1));
+            it.play(Card.byId("Knight"), 0);
+            check(in.status(Card.byId("Goblin Barrel")).startsWith("через 2"), "barrel in 2");
+            lines = in.lines();
+            check(lines.get(lines.size() - 1).startsWith("🎯 Knight"), "last troop line: " + lines);
+            it.play(Card.byId("Archers"), 0);
+            check(in.status(Card.byId("Goblin Barrel")).startsWith("через 1"), "barrel next");
+            it.play(Card.byId("Zap"), 0);
+            check(in.status(Card.byId("Goblin Barrel")).startsWith("в руці"), "barrel back in hand, elixir short");
+        } catch (java.io.IOException e) {
+            check(false, "stats load: " + e);
+        }
 
         if (failures > 0) {
             System.out.println(failures + " check(s) failed");

@@ -21,6 +21,11 @@ public final class Tracker {
     public static final long TRIPLE_FROM_MS = 240_000;
     public static final int DECK_SIZE = 8;
     public static final int QUEUE_SIZE = 4;
+    /** Elixir Collector (RoyaleAPI data): 1 elixir every 9 s for 65 s after a 1 s deploy, +1 on death. */
+    static final long PUMP_DEPLOY_MS = 1_000;
+    static final long PUMP_INTERVAL_MS = 9_000;
+    static final long PUMP_LIFE_MS = 65_000;
+    static final String PUMP_ID = "Elixir Collector";
 
     private enum Kind { PLAY, ABILITY, ADJUST }
 
@@ -29,6 +34,8 @@ public final class Tracker {
         final Card card;
         final double appliedDelta;
         final boolean addedToDeck;
+        /** Collector started by this play, so undo can remove it. */
+        Pump pump;
 
         Action(Kind kind, Card card, double appliedDelta, boolean addedToDeck) {
             this.kind = kind;
@@ -38,8 +45,23 @@ public final class Tracker {
         }
     }
 
+    /** A live opponent Elixir Collector. */
+    private static final class Pump {
+        long placedAtMs;
+        int produced;
+        boolean dead;
+        /** Elixir actually added by this pump (after the 10 cap), for undo. */
+        double applied;
+
+        Pump(long placedAtMs) {
+            this.placedAtMs = placedAtMs;
+        }
+    }
+
     private final List<Action> actions = new ArrayList<>();
     private final List<Card> deck = new ArrayList<>();
+    private final List<Pump> pumps = new ArrayList<>();
+    private double leaked;
     private boolean running;
     private long elapsedMs;
     private long lastTickMs;
@@ -50,6 +72,8 @@ public final class Tracker {
     public void reset() {
         actions.clear();
         deck.clear();
+        pumps.clear();
+        leaked = 0;
         running = false;
         elapsedMs = 0;
         elixir = START_ELIXIR;
@@ -76,8 +100,78 @@ public final class Tracker {
         long dt = nowMs - lastTickMs;
         lastTickMs = nowMs;
         if (dt <= 0) return;
-        elixir = Math.min(MAX_ELIXIR, elixir + dt / 1000.0 * getMultiplier() / SECONDS_PER_ELIXIR);
+        regen(dt);
         elapsedMs += dt;
+        runPumps();
+    }
+
+    private void regen(long dt) {
+        double next = elixir + dt / 1000.0 * getMultiplier() / SECONDS_PER_ELIXIR;
+        if (next > MAX_ELIXIR) leaked += next - MAX_ELIXIR;
+        elixir = Math.min(MAX_ELIXIR, next);
+    }
+
+    private void runPumps() {
+        for (Pump p : pumps) {
+            if (p.dead) continue;
+            long alive = elapsedMs - p.placedAtMs - PUMP_DEPLOY_MS;
+            int due = (int) Math.max(0, Math.min(alive, PUMP_LIFE_MS) / PUMP_INTERVAL_MS);
+            while (p.produced < due) {
+                p.produced++;
+                p.applied += gain(1);
+            }
+            if (alive >= PUMP_LIFE_MS) killPump(p);
+        }
+    }
+
+    private void killPump(Pump p) {
+        p.dead = true;
+        p.applied += gain(1);
+    }
+
+    /** Adds elixir with the cap, counting overflow as leaked; returns what was applied. */
+    private double gain(double amount) {
+        double before = elixir;
+        double next = elixir + amount;
+        if (next > MAX_ELIXIR) leaked += next - MAX_ELIXIR;
+        elixir = Math.min(MAX_ELIXIR, next);
+        return elixir - before;
+    }
+
+    /**
+     * Shifts the battle clock to match the in-game timer. A positive delta means the battle
+     * started earlier than we thought, so the opponent also gained that much extra elixir.
+     */
+    public void shiftClock(long deltaMs, long nowMs) {
+        tick(nowMs);
+        long target = Math.max(0, elapsedMs + deltaMs);
+        long d = target - elapsedMs;
+        if (d > 0) regen(d); else elixir = clamp(elixir + d / 1000.0 * getMultiplier() / SECONDS_PER_ELIXIR);
+        elapsedMs = target;
+        // Collectors were placed at a real moment: keep their age unchanged.
+        for (Pump p : pumps) p.placedAtMs += d;
+        runPumps();
+    }
+
+    /** Elixir the opponent wasted while sitting at 10. */
+    public double getLeaked() {
+        return leaked;
+    }
+
+    public boolean hasActivePump() {
+        for (Pump p : pumps) if (!p.dead) return true;
+        return false;
+    }
+
+    /** The opponent's collector was destroyed early: it pays out its death elixir and stops. */
+    public void destroyPump(long nowMs) {
+        tick(nowMs);
+        for (Pump p : pumps) {
+            if (!p.dead) {
+                killPump(p);
+                return;
+            }
+        }
     }
 
     public double getElixir() {
@@ -114,7 +208,12 @@ public final class Tracker {
             deck.add(card);
             added = true;
         }
-        actions.add(new Action(Kind.PLAY, card, applyDelta(-cost), added));
+        Action action = new Action(Kind.PLAY, card, applyDelta(-cost), added);
+        if (PUMP_ID.equals(card.id)) {
+            action.pump = new Pump(elapsedMs);
+            pumps.add(action.pump);
+        }
+        actions.add(action);
     }
 
     /** Elixir the card costs right now (Mirror = last played card + 1). */
@@ -148,6 +247,10 @@ public final class Tracker {
         Action a = actions.remove(actions.size() - 1);
         elixir = clamp(elixir - a.appliedDelta);
         if (a.addedToDeck) deck.remove(a.card);
+        if (a.pump != null) {
+            pumps.remove(a.pump);
+            elixir = clamp(elixir - a.pump.applied);
+        }
     }
 
     private double applyDelta(double delta) {
@@ -164,6 +267,14 @@ public final class Tracker {
 
     public List<Card> getDeck() {
         return new ArrayList<>(deck);
+    }
+
+    /** Most recent card the opponent played, or null. */
+    public Card getLastPlayed() {
+        for (int i = actions.size() - 1; i >= 0; i--) {
+            if (actions.get(i).kind == Kind.PLAY) return actions.get(i).card;
+        }
+        return null;
     }
 
     public int getPlayCount() {

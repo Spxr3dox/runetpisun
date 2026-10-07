@@ -18,16 +18,18 @@ rm -rf "$OUT"
 mkdir -p "$OUT"/{res,gen,classes,test-classes,dex}
 
 echo "> unit tests (JVM)"
-javac -nowarn -d "$OUT/test-classes" \
+javac -nowarn -encoding UTF-8 -d "$OUT/test-classes" \
   "$SRC/java/com/runetpisun/croverlay/Card.java" \
   "$SRC/java/com/runetpisun/croverlay/Tracker.java" \
+  "$SRC/java/com/runetpisun/croverlay/Stats.java" \
+  "$SRC/java/com/runetpisun/croverlay/Insights.java" \
   "$APP/src/test/java/com/runetpisun/croverlay/TrackerTest.java"
-java -cp "$OUT/test-classes" com.runetpisun.croverlay.TrackerTest
+java -Dstdout.encoding=UTF-8 -cp "$OUT/test-classes" com.runetpisun.croverlay.TrackerTest "$SRC/assets/stats.tsv"
 
 echo "> resources"
 aapt2 compile --dir "$SRC/res" -o "$OUT/res/compiled.zip"
 aapt2 link -o "$OUT/unsigned.apk" -I "$ANDROID_JAR" \
-  --manifest "$SRC/AndroidManifest.xml" --java "$OUT/gen" \
+  --manifest "$SRC/AndroidManifest.xml" --java "$OUT/gen" -A "$SRC/assets" \
   --min-sdk-version 26 --target-sdk-version 34 \
   "$OUT/res/compiled.zip"
 

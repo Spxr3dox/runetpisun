@@ -22,6 +22,9 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -52,6 +55,13 @@ final class OverlayController {
     private TextView undoBtn;
     private TextView abilityBtn;
     private TextView cycleText;
+    private TextView insightsText;
+    private TextView pumpBtn;
+    private TextView oppLevelText;
+    private LinearLayout battlePanel;
+    private final AppSettings settings;
+    private final Stats stats;
+    private List<Card> myDeck = new ArrayList<>();
     private ElixirBar elixirBar;
     private final TextView[] slots = new TextView[Tracker.DECK_SIZE];
     private LinearLayout picker;
@@ -74,11 +84,22 @@ final class OverlayController {
         this.ctx = ctx;
         this.wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
         this.prefs = ctx.getSharedPreferences("overlay", Context.MODE_PRIVATE);
+        this.settings = new AppSettings(ctx);
+        this.stats = loadStats(ctx);
+    }
+
+    private static Stats loadStats(Context ctx) {
+        try (InputStreamReader in = new InputStreamReader(ctx.getAssets().open("stats.tsv"), StandardCharsets.UTF_8)) {
+            return Stats.parse(in);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     void show() {
         if (shown) return;
         if (root == null) build();
+        myDeck = settings.myDeck();
         wm.addView(root, params);
         shown = true;
         refreshAll();
@@ -131,6 +152,9 @@ final class OverlayController {
         container.addView(panel, new LinearLayout.LayoutParams(dp(268), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         panel.addView(buildHeader());
+        battlePanel = buildBattlePanel();
+        battlePanel.setVisibility(View.GONE);
+        panel.addView(battlePanel);
         elixirBar = new ElixirBar(ctx);
         panel.addView(elixirBar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(10)));
         panel.addView(buildDeckRow(0));
@@ -139,6 +163,10 @@ final class OverlayController {
         cycleText = text("", 11, 0xFFCFD8DC);
         cycleText.setPadding(dp(2), dp(3), dp(2), dp(3));
         panel.addView(cycleText);
+
+        insightsText = text("", 11, 0xFFFFE082);
+        insightsText.setPadding(dp(2), 0, dp(2), dp(3));
+        panel.addView(insightsText);
 
         panel.addView(buildActionRow());
         picker = buildPicker();
@@ -168,6 +196,13 @@ final class OverlayController {
             public void onClick(View v) {
                 tracker.cycleMultiplier();
                 refreshLive();
+            }
+        });
+        clockText.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                battlePanel.setVisibility(battlePanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+                return true;
             }
         });
         row.addView(clockText, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
@@ -256,6 +291,16 @@ final class OverlayController {
             }
         });
         row.addView(abilityBtn, weighted());
+        pumpBtn = button("💀Pump", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                tracker.destroyPump(SystemClock.elapsedRealtime());
+                refreshAll();
+            }
+        });
+        pumpBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        pumpBtn.setVisibility(View.GONE);
+        row.addView(pumpBtn, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 2));
         row.addView(button("+ карта", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -263,6 +308,50 @@ final class OverlayController {
             }
         }), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 2));
         return row;
+    }
+
+    /** Long-press on the clock: sync with the in-game timer and set the opponent's card level. */
+    private LinearLayout buildBattlePanel() {
+        LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.VERTICAL);
+
+        TextView hint = text("Синхронізуй з таймером гри (якщо ▶ натиснуто із запізненням — «+»):", 10, 0xFFB0BEC5);
+        box.addView(hint);
+        LinearLayout time = hRow();
+        long[] shifts = {-5_000, -1_000, 1_000, 5_000};
+        String[] labels = {"−5с", "−1с", "+1с", "+5с"};
+        for (int i = 0; i < shifts.length; i++) {
+            final long shift = shifts[i];
+            time.addView(button(labels[i], new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    tracker.shiftClock(shift, SystemClock.elapsedRealtime());
+                    refreshAll();
+                }
+            }), weighted());
+        }
+        box.addView(time);
+
+        LinearLayout level = hRow();
+        level.setGravity(Gravity.CENTER_VERTICAL);
+        oppLevelText = text("", 12, Color.WHITE);
+        level.addView(oppLevelText, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 2));
+        level.addView(button("−", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                settings.setOppLevel(settings.oppLevel() - 1);
+                refreshAll();
+            }
+        }), weighted());
+        level.addView(button("+", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                settings.setOppLevel(settings.oppLevel() + 1);
+                refreshAll();
+            }
+        }), weighted());
+        box.addView(level);
+        return box;
     }
 
     private LinearLayout buildPicker() {
@@ -362,12 +451,18 @@ final class OverlayController {
         double elixir = tracker.getElixir();
         String value = String.format(Locale.US, "%.1f", elixir);
         int mult = tracker.getMultiplier();
-        pill.setText("💧 " + value + (mult > 1 ? "  x" + mult : ""));
+        String insights = buildInsights();
+        boolean surpriseReady = insights.matches("(?s).*🛢[^\n]*✅.*");
+        pill.setText("💧 " + value + (mult > 1 ? "  x" + mult : "") + (surpriseReady ? "  🛢!" : ""));
         if (collapsed) return;
         elixirText.setText(value);
         elixirText.setTextColor(elixir >= Tracker.MAX_ELIXIR ? 0xFFFF5252 : COLOR_ELIXIR);
         elixirBar.setValue(elixir);
         clockText.setText(clockLabel() + "  x" + mult + (tracker.isAutoMultiplier() ? "" : "!"));
+        if (!insights.contentEquals(insightsText.getText())) {
+            insightsText.setText(insights);
+            insightsText.setVisibility(insights.isEmpty() ? View.GONE : View.VISIBLE);
+        }
     }
 
     private String clockLabel() {
@@ -413,7 +508,22 @@ final class OverlayController {
             sb.append(queue[i] == null ? "?" : queue[i].shortName);
         }
         sb.append("   |  карт: ").append(deck.size()).append("/8");
+        if (tracker.getLeaked() >= 0.1) {
+            sb.append(String.format(Locale.US, "\nВтратив на 10💧: %.1f", tracker.getLeaked()));
+        }
         cycleText.setText(sb.toString());
+        pumpBtn.setVisibility(tracker.hasActivePump() ? View.VISIBLE : View.GONE);
+        oppLevelText.setText("Рівень карт суперника: " + settings.oppLevel());
+    }
+
+    private String buildInsights() {
+        List<String> lines = new Insights(tracker, stats, myDeck, settings.myLevel(), settings.oppLevel()).lines();
+        StringBuilder sb = new StringBuilder();
+        for (String line : lines) {
+            if (sb.length() > 0) sb.append('\n');
+            sb.append(line);
+        }
+        return sb.toString();
     }
 
     // ---------------------------------------------------------------- helpers
