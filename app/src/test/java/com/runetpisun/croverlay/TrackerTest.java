@@ -153,7 +153,7 @@ public final class TrackerTest {
             List<Card> mine = new java.util.ArrayList<>();
             mine.add(log);
             mine.add(Card.byId("Musketeer"));
-            Insights in = new Insights(it, st, mine, 11, 11);
+            Insights in = new Insights(it, st, mine, new AppLevels(null, 11, 11));
             List<String> lines = in.lines();
             check(lines.size() == 2, "2 insight lines (last play is a spell): " + lines);
             check(lines.get(0).contains("через 3") && lines.get(0).contains("Log✔"), "barrel line: " + lines.get(0));
@@ -168,6 +168,30 @@ public final class TrackerTest {
             check(in.status(Card.byId("Goblin Barrel")).startsWith("в руці"), "barrel back in hand, elixir short");
         } catch (java.io.IOException e) {
             check(false, "stats load: " + e);
+        }
+
+        // API parsing: per-rarity levels -> in-game levels, deck, opponents' average.
+        try {
+            String player = "{\"cards\":["
+                    + "{\"name\":\"Knight\",\"level\":14,\"maxLevel\":16},"
+                    + "{\"name\":\"Musketeer\",\"level\":12,\"maxLevel\":14},"
+                    + "{\"name\":\"The Log\",\"level\":5,\"maxLevel\":8}],"
+                    + "\"currentDeck\":[{\"name\":\"Knight\",\"level\":14,\"maxLevel\":16},"
+                    + "{\"name\":\"The Log\",\"level\":5,\"maxLevel\":8},{\"name\":\"Unknown New Card\",\"level\":1,\"maxLevel\":6}]}";
+            String battlelog = "[{\"opponent\":[{\"cards\":[{\"name\":\"Hog Rider\",\"level\":11,\"maxLevel\":14},"
+                    + "{\"name\":\"Fireball\",\"level\":11,\"maxLevel\":14}]}]},"
+                    + "{\"opponent\":[{\"cards\":[{\"name\":\"Golem\",\"level\":8,\"maxLevel\":11}]}]}]";
+            ApiParser.Result r = ApiParser.parse(player, battlelog);
+            check(r.myLevels.get("Knight") == 14 && r.myLevels.get("Musketeer") == 14 && r.myLevels.get("The Log") == 13,
+                    "api levels: " + r.myLevels);
+            check(r.myDeck.size() == 2, "unknown cards skipped in deck");
+            check(r.oppLevel == 13 && r.battlesUsed == 2, "opp level 13 from (13,13,13): " + r.oppLevel);
+            check(r.lastOpponent.get("Fireball") == 13, "last opponent fireball 13");
+            check(ApiParser.normalizeTag(" #2pp0l ").equals("2PP0L"), "tag normalize");
+            AppLevels lv = new AppLevels(r.myLevels, 11, r.oppLevel);
+            check(lv.mine(Card.byId("Knight")) == 14 && lv.mine(Card.byId("Zap")) == 11, "levels lookup");
+        } catch (Exception e) {
+            check(false, "api parse: " + e);
         }
 
         if (failures > 0) {

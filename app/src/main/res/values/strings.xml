@@ -15,6 +15,12 @@
     <string name="btn_pick_deck">Вибрати мою колоду (8 карт)</string>
     <string name="my_deck_empty">Колоду не вибрано — прогнози «вб\'є / не вб\'є» будуть неповні.</string>
     <string name="deck_full">Максимум 8 карт</string>
-    <string name="my_level">Рівень моїх карт: %1$d</string>
-    <string name="opp_level">Рівень карт суперника: %1$d</string>
+    <string name="my_level">Мій рівень (якщо без API): %1$d</string>
+    <string name="opp_level">Рівень суперника (авто з API): %1$d</string>
+    <string name="api_help">Автоматичні рівні й колода (офіційний Clash Royale API, один раз):\n1. developer.clashroyale.com → Register → My Account → Create New Key.\n2. У полі IP впиши: %1$s (проксі RoyaleAPI — IP телефона постійно змінюється).\n3. Скопіюй ключ і встав нижче разом зі своїм тегом (Профіль у грі → #ТЕГ).\nДалі все само: при запуску гри і після кожного бою (⟲) додаток підтягне рівні твоїх карт, колоду і середній рівень суперників.</string>
+    <string name="api_tag_hint">Твій тег, напр. #2PP0L9QY</string>
+    <string name="api_key_hint">API ключ (eyJ0eXAi…)</string>
+    <string name="btn_sync">Зберегти і синхронізувати</string>
+    <string name="api_missing">Впиши тег і ключ</string>
+    <string name="syncing">Синхронізація…</string>
 </resources>

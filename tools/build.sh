@@ -3,6 +3,7 @@
 # Needs: JDK, aapt2, dx (or d8), zipalign, apksigner, and an android.jar (API 34).
 #   Ubuntu/Debian: apt install aapt dalvik-exchange zipalign apksigner
 #   android.jar:   ANDROID_JAR=/path/to/platforms/android-34/android.jar
+#   org.json:      JSON_JAR=/path/to/json.jar (Maven Central org.json:json, tests only)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -10,6 +11,8 @@ APP="$ROOT/app"
 SRC="$APP/src/main"
 OUT="$APP/build"
 ANDROID_JAR="${ANDROID_JAR:-/opt/android-jars/android-34.jar}"
+# org.json for JVM tests (Android ships it; android.jar only has stubs).
+JSON_JAR="${JSON_JAR:-/opt/android-jars/json.jar}"
 APK="$OUT/cr-elixir-tracker.apk"
 
 [ -f "$ANDROID_JAR" ] || { echo "android.jar not found: $ANDROID_JAR (set ANDROID_JAR)"; exit 1; }
@@ -18,13 +21,15 @@ rm -rf "$OUT"
 mkdir -p "$OUT"/{res,gen,classes,test-classes,dex}
 
 echo "> unit tests (JVM)"
-javac -nowarn -encoding UTF-8 -d "$OUT/test-classes" \
+javac -nowarn -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT/test-classes" \
   "$SRC/java/com/runetpisun/croverlay/Card.java" \
   "$SRC/java/com/runetpisun/croverlay/Tracker.java" \
   "$SRC/java/com/runetpisun/croverlay/Stats.java" \
   "$SRC/java/com/runetpisun/croverlay/Insights.java" \
+  "$SRC/java/com/runetpisun/croverlay/AppLevels.java" \
+  "$SRC/java/com/runetpisun/croverlay/ApiParser.java" \
   "$APP/src/test/java/com/runetpisun/croverlay/TrackerTest.java"
-java -Dstdout.encoding=UTF-8 -cp "$OUT/test-classes" com.runetpisun.croverlay.TrackerTest "$SRC/assets/stats.tsv"
+java -Dstdout.encoding=UTF-8 -cp "$OUT/test-classes:$JSON_JAR" com.runetpisun.croverlay.TrackerTest "$SRC/assets/stats.tsv"
 
 echo "> resources"
 aapt2 compile --dir "$SRC/res" -o "$OUT/res/compiled.zip"

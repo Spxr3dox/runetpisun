@@ -62,6 +62,7 @@ final class OverlayController {
     private final AppSettings settings;
     private final Stats stats;
     private List<Card> myDeck = new ArrayList<>();
+    private AppLevels levels;
     private ElixirBar elixirBar;
     private final TextView[] slots = new TextView[Tracker.DECK_SIZE];
     private LinearLayout picker;
@@ -99,8 +100,9 @@ final class OverlayController {
     void show() {
         if (shown) return;
         if (root == null) build();
-        myDeck = settings.myDeck();
+        reloadSettings();
         wm.addView(root, params);
+        syncApi();
         shown = true;
         refreshAll();
         handler.post(ticker);
@@ -230,6 +232,8 @@ final class OverlayController {
             @Override
             public boolean onLongClick(View v) {
                 tracker.reset();
+                // The battle that just ended is now in the battle log: refresh levels.
+                syncApi();
                 showPicker(false);
                 refreshAll();
                 return true;
@@ -340,6 +344,7 @@ final class OverlayController {
             @Override
             public void onClick(View v) {
                 settings.setOppLevel(settings.oppLevel() - 1);
+                reloadSettings();
                 refreshAll();
             }
         }), weighted());
@@ -347,6 +352,7 @@ final class OverlayController {
             @Override
             public void onClick(View v) {
                 settings.setOppLevel(settings.oppLevel() + 1);
+                reloadSettings();
                 refreshAll();
             }
         }), weighted());
@@ -516,8 +522,23 @@ final class OverlayController {
         oppLevelText.setText("Рівень карт суперника: " + settings.oppLevel());
     }
 
+    private void reloadSettings() {
+        myDeck = settings.myDeck();
+        levels = settings.levels();
+    }
+
+    private void syncApi() {
+        ApiSync.syncAsync(ctx, false, new ApiSync.Callback() {
+            @Override
+            public void done(boolean ok, String message) {
+                reloadSettings();
+                if (shown) refreshAll();
+            }
+        });
+    }
+
     private String buildInsights() {
-        List<String> lines = new Insights(tracker, stats, myDeck, settings.myLevel(), settings.oppLevel()).lines();
+        List<String> lines = new Insights(tracker, stats, myDeck, levels).lines();
         StringBuilder sb = new StringBuilder();
         for (String line : lines) {
             if (sb.length() > 0) sb.append('\n');

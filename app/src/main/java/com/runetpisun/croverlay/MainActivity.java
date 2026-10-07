@@ -13,7 +13,9 @@ import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.View;
+import android.text.InputType;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -26,6 +28,8 @@ import java.util.List;
 public final class MainActivity extends Activity {
     private TextView status;
     private TextView myDeckText;
+    private TextView syncText;
+    private final List<Runnable> levelUpdaters = new ArrayList<>();
     private AppSettings settings;
 
     @Override
@@ -83,6 +87,7 @@ public final class MainActivity extends Activity {
         box.addView(deckTitle);
         myDeckText = new TextView(this);
         box.addView(myDeckText);
+        box.addView(apiSection());
         box.addView(button(R.string.btn_pick_deck, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -111,6 +116,54 @@ public final class MainActivity extends Activity {
         boolean on = isServiceEnabled();
         status.setText(on ? R.string.status_on : R.string.status_off);
         status.setTextColor(on ? 0xFF2E7D32 : Color.RED);
+    }
+
+    private View apiSection() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        TextView help = new TextView(this);
+        help.setText(getString(R.string.api_help, ApiSync.PROXY_IP));
+        help.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        help.setTextIsSelectable(true);
+        box.addView(help);
+
+        final EditText tag = new EditText(this);
+        tag.setHint(R.string.api_tag_hint);
+        tag.setSingleLine(true);
+        tag.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
+        tag.setText(settings.tag().isEmpty() ? "" : "#" + settings.tag());
+        box.addView(tag);
+
+        final EditText key = new EditText(this);
+        key.setHint(R.string.api_key_hint);
+        key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        key.setText(settings.apiKey());
+        box.addView(key);
+
+        box.addView(button(R.string.btn_sync, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                settings.setApi(tag.getText().toString(), key.getText().toString());
+                if (!settings.hasApi()) {
+                    syncText.setText(R.string.api_missing);
+                    return;
+                }
+                syncText.setText(R.string.syncing);
+                ApiSync.syncAsync(MainActivity.this, true, new ApiSync.Callback() {
+                    @Override
+                    public void done(boolean ok, String message) {
+                        syncText.setText(message);
+                        refreshDeck();
+                        for (Runnable r : levelUpdaters) r.run();
+                    }
+                });
+            }
+        }));
+        syncText = new TextView(this);
+        syncText.setText(settings.syncStatus());
+        syncText.setPadding(0, dp(4), 0, dp(8));
+        box.addView(syncText);
+        return box;
     }
 
     private void refreshDeck() {
@@ -174,6 +227,7 @@ public final class MainActivity extends Activity {
             }
         };
         update.run();
+        levelUpdaters.add(update);
         row.addView(label, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         for (final int delta : new int[] {-1, 1}) {
             Button b = new Button(this);

@@ -25,15 +25,13 @@ public final class Insights {
     private final Tracker tracker;
     private final Stats stats;
     private final List<Card> myDeck;
-    private final int myLevel;
-    private final int oppLevel;
+    private final AppLevels levels;
 
-    public Insights(Tracker tracker, Stats stats, List<Card> myDeck, int myLevel, int oppLevel) {
+    public Insights(Tracker tracker, Stats stats, List<Card> myDeck, AppLevels levels) {
         this.tracker = tracker;
         this.stats = stats;
         this.myDeck = myDeck;
-        this.myLevel = myLevel;
-        this.oppLevel = oppLevel;
+        this.levels = levels;
     }
 
     public List<String> lines() {
@@ -77,7 +75,7 @@ public final class Insights {
         for (Card mine : myDeck) {
             Stats.Spell spell = stats.spell(mine);
             if (spell == null) continue;
-            int left = spell.hpLeft(myLevel, unit, oppLevel);
+            int left = spell.hpLeft(levels.mine(mine), unit, levels.opponent(card));
             if (left == Integer.MAX_VALUE) continue;
             answers.append(' ').append(mine.shortName).append(left <= 0 ? "✔" : "✗");
         }
@@ -88,19 +86,19 @@ public final class Insights {
     private String spellLine(Card card) {
         Stats.Spell spell = stats.spell(card);
         StringBuilder sb = new StringBuilder("🔥 ").append(card.shortName)
-                .append(' ').append(spell.totalDamage(oppLevel))
+                .append(' ').append(spell.totalDamage(levels.opponent(card)))
                 .append(" [").append(status(card)).append(']');
         List<String> kills = new ArrayList<>();
         List<String> survives = new ArrayList<>();
         for (Card mine : myDeck) {
-            int left = hpLeftAfter(spell, oppLevel, mine, myLevel);
+            int left = hpLeftAfter(spell, levels.opponent(card), mine, levels.mine(mine));
             if (left == Integer.MAX_VALUE) continue;
             if (left <= 0) kills.add(mine.shortName);
             else survives.add(mine.shortName + "(" + left + ")");
         }
         if (!kills.isEmpty()) sb.append(" вб'є: ").append(join(kills));
         if (!survives.isEmpty()) sb.append(" · ні: ").append(join(survives));
-        if (spell.towerPercent > 0) sb.append(" · вежа −").append(spell.towerDamage(oppLevel));
+        if (spell.towerPercent > 0) sb.append(" · вежа −").append(spell.towerDamage(levels.opponent(card)));
         return sb.toString();
     }
 
@@ -108,6 +106,7 @@ public final class Insights {
         Card last = tracker.getLastPlayed();
         if (last == null || stats == null || stats.units(last).isEmpty()) return null;
         Stats.Unit unit = stats.units(last).get(0);
+        int oppLevel = levels.opponent(last);
         StringBuilder sb = new StringBuilder("🎯 ").append(last.shortName)
                 .append(' ').append(unit.hp(oppLevel)).append("HP");
         if (unit.shield(oppLevel) > 0) sb.append("+🛡").append(unit.shield(oppLevel));
@@ -115,7 +114,7 @@ public final class Insights {
         for (Card mine : myDeck) {
             Stats.Spell spell = stats.spell(mine);
             if (spell == null) continue;
-            int left = hpLeftAfter(spell, myLevel, last, oppLevel);
+            int left = hpLeftAfter(spell, levels.mine(mine), last, oppLevel);
             if (left == Integer.MAX_VALUE) continue;
             sb.append(' ').append(mine.shortName).append(left <= 0 ? "✔" : "✗(" + left + ")");
             shown++;
