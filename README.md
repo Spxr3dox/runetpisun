@@ -47,3 +47,6 @@ ANDROID_JAR=/path/to/android-34/android.jar tools/build.sh
 Вартості карт — у `Card.java`; після балансних змін їх можна підправити там.
 
 > ⚠️ Сторонні інструменти можуть порушувати правила Supercell (Terms of Service / Fair Play). Використовуєш на власний ризик.
+
+## iOS
+Програма «Gemini Кнопка» для iPhone — див. [`ios-gemini-button/`](ios-gemini-button/README.md).

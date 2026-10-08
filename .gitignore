@@ -1,2 +1,7 @@
 app/build/
 *.idsig
+ios-gemini-button/GeminiButton.xcodeproj/
+ios-gemini-button/GeminiButton/Info.plist
+ios-gemini-button/build/
+ios-gemini-button/Payload/
+*.ipa
