@@ -1,26 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">CR Elixir Tracker</string>
-    <string name="service_label">CR Elixir Tracker (оверлей)</string>
-    <string name="service_description">Показує трекер еліксиру, колоди та циклу суперника лише поверх Clash Royale. Сервіс бачить тільки назву застосунку на екрані, вміст екрана не читається.</string>
-    <string name="status_on">✅ Сервіс увімкнено. Запусти Clash Royale — оверлей з\'явиться автоматично.</string>
-    <string name="status_off">❌ Сервіс вимкнено. Виконай кроки нижче.</string>
-    <string name="game_missing">Clash Royale не встановлено.</string>
-    <string name="setup_help">1. (Android 13+, APK не з Play Store) Натисни «Інформація про застосунок» → ⋮ (вгорі праворуч) → «Дозволити обмежені налаштування».\n2. Натисни «Спеціальні можливості» → «Встановлені застосунки» → CR Elixir Tracker → увімкни.\n3. Запусти Clash Royale.</string>
-    <string name="btn_restricted">Інформація про застосунок</string>
+    <string name="app_name">Care Elixir Reader</string>
+    <string name="service_label">Care Elixir Reader (оверлей)</string>
+    <string name="service_description">Автоматично відстежує карти суперника в Clash Royale через захоплення екрану і рахує його еліксир.</string>
+    <string name="status_on">✅ Сервіс увімкнено</string>
+    <string name="status_off">❌ Сервіс вимкнено</string>
+    <string name="capture_on">✅ Захоплення екрану активне</string>
+    <string name="capture_off">❌ Захоплення екрану вимкнено</string>
+    <string name="game_missing">Clash Royale не встановлено</string>
+    <string name="setup_help">1. Натисни «Спеціальні можливості» → «Встановлені застосунки» → Care Elixir Reader → увімкни.\n2. Натисни «Запустити захоплення» — дозволь запис екрану.\n3. Запусти Clash Royale — оверлей з\'явиться автоматично.</string>
     <string name="btn_accessibility">Спеціальні можливості</string>
+    <string name="btn_capture">Запустити захоплення</string>
+    <string name="btn_stop_capture">Зупинити захоплення</string>
     <string name="btn_launch_game">Запустити Clash Royale</string>
-    <string name="usage_help">Як користуватись у бою:\n• ▶ — натисни на старті бою (таймер 3:00). Еліксир стартує з 5.\n• Коли суперник грає карту: тапни її слот у колоді, або «+ карта» / «?» → вкладка з вартістю → карта.\n• Слоти: зелений ✓ — карта в руці; жовтий 1 — наступна прийде в руку; сірий 2-4 — черга.\n• Рядок «Далі» — порядок, у якому карти повернуться в руку.\n• Тап по таймеру — режим еліксиру: авто / x1 / x2 / x3 (! = ручний).\n• ⚡ — здібність чемпіона. +1/−1 — корекція (Elixir Collector тощо).\n• ↶ — скасувати останню дію. ⟲ (утримання) — новий бій. – — згорнути, ⠿ — перетягнути.\n• Якщо суперник зіграв дорожчу карту, ніж є за трекером, еліксир обнулюється — так лічильник сам калібрується.\n• Утримай таймер — синхронізація з часом гри (±1с/±5с) і рівень карт суперника.\n• Elixir Collector рахується автоматично (+1 кожні 9с, +1 при знищенні). Якщо його зламали раніше — 💀Pump.\n\nПрогнози (жовті рядки):\n• 🛢 Goblin Barrel / Drill / Miner / Graveyard — коли можуть прилетіти (в руці + чи вистачає еліксиру, або через скільки ходів) і які твої спели вб\'ють гоблінів/скелетів.\n• 🔥 Спел суперника — шкода, кого з твоєї колоди вб\'є, скільки HP залишиться, шкода по вежі.\n• 🎯 Остання зіграна суперником карта — чи вб\'ють її твої спели.\nДані HP/шкоди: RoyaleAPI (жовтень 2023), після балансних змін можуть трохи відрізнятись.</string>
-    <string name="my_deck_title">Моя колода і рівні (для прогнозів)</string>
-    <string name="btn_pick_deck">Вибрати мою колоду (8 карт)</string>
-    <string name="my_deck_empty">Колоду не вибрано — прогнози «вб\'є / не вб\'є» будуть неповні.</string>
-    <string name="deck_full">Максимум 8 карт</string>
-    <string name="my_level">Мій рівень (якщо без API): %1$d</string>
-    <string name="opp_level">Рівень суперника (авто з API): %1$d</string>
-    <string name="api_help">Автоматичні рівні й колода (офіційний Clash Royale API, один раз):\n1. developer.clashroyale.com → Register → My Account → Create New Key.\n2. У полі IP впиши: %1$s (проксі RoyaleAPI — IP телефона постійно змінюється).\n3. Скопіюй ключ і встав нижче разом зі своїм тегом (Профіль у грі → #ТЕГ).\nДалі все само: при запуску гри і після кожного бою (⟲) додаток підтягне рівні твоїх карт, колоду і середній рівень суперників.</string>
-    <string name="api_tag_hint">Твій тег, напр. #2PP0L9QY</string>
+    <string name="api_tag_hint">Твій тег, напр. #UVJ0GGUCC</string>
     <string name="api_key_hint">API ключ (eyJ0eXAi…)</string>
     <string name="btn_sync">Зберегти і синхронізувати</string>
-    <string name="api_missing">Впиши тег і ключ</string>
     <string name="syncing">Синхронізація…</string>
+    <string name="api_missing">Впиши тег і ключ</string>
+    <string name="capture_notification_title">Care Elixir Reader</string>
+    <string name="capture_notification_text">Захоплення екрану активне</string>
+    <string name="channel_name">Захоплення екрану</string>
 </resources>

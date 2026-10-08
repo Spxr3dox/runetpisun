@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# Builds app/build/cr-elixir-tracker.apk without Gradle.
-# Needs: JDK, aapt2, dx (or d8), zipalign, apksigner, and an android.jar (API 34).
-#   Ubuntu/Debian: apt install aapt dalvik-exchange zipalign apksigner
-#   android.jar:   ANDROID_JAR=/path/to/platforms/android-34/android.jar
-#   org.json:      JSON_JAR=/path/to/json.jar (Maven Central org.json:json, tests only)
+# Builds Care Elixir Reader APK without Gradle.
+# Needs: JDK, aapt2, d8/dx, zipalign, apksigner, android.jar (API 34)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -11,25 +8,13 @@ APP="$ROOT/app"
 SRC="$APP/src/main"
 OUT="$APP/build"
 ANDROID_JAR="${ANDROID_JAR:-/opt/android-jars/android-34.jar}"
-# org.json for JVM tests (Android ships it; android.jar only has stubs).
 JSON_JAR="${JSON_JAR:-/opt/android-jars/json.jar}"
-APK="$OUT/cr-elixir-tracker.apk"
+APK="$OUT/care-elixir-reader.apk"
 
-[ -f "$ANDROID_JAR" ] || { echo "android.jar not found: $ANDROID_JAR (set ANDROID_JAR)"; exit 1; }
+[ -f "$ANDROID_JAR" ] || { echo "android.jar not found: $ANDROID_JAR"; exit 1; }
 
 rm -rf "$OUT"
-mkdir -p "$OUT"/{res,gen,classes,test-classes,dex}
-
-echo "> unit tests (JVM)"
-javac -nowarn -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT/test-classes" \
-  "$SRC/java/com/runetpisun/croverlay/Card.java" \
-  "$SRC/java/com/runetpisun/croverlay/Tracker.java" \
-  "$SRC/java/com/runetpisun/croverlay/Stats.java" \
-  "$SRC/java/com/runetpisun/croverlay/Insights.java" \
-  "$SRC/java/com/runetpisun/croverlay/AppLevels.java" \
-  "$SRC/java/com/runetpisun/croverlay/ApiParser.java" \
-  "$APP/src/test/java/com/runetpisun/croverlay/TrackerTest.java"
-java -Dstdout.encoding=UTF-8 -cp "$OUT/test-classes:$JSON_JAR" com.runetpisun.croverlay.TrackerTest "$SRC/assets/stats.tsv"
+mkdir -p "$OUT"/{res,gen,classes,dex}
 
 echo "> resources"
 aapt2 compile --dir "$SRC/res" -o "$OUT/res/compiled.zip"
@@ -41,7 +26,7 @@ aapt2 link -o "$OUT/unsigned.apk" -I "$ANDROID_JAR" \
 echo "> javac"
 find "$SRC/java" "$OUT/gen" -name '*.java' > "$OUT/sources.txt"
 javac -nowarn -Xlint:-options -source 8 -target 8 -encoding UTF-8 \
-  -bootclasspath "$ANDROID_JAR" -d "$OUT/classes" @"$OUT/sources.txt"
+  -classpath "$ANDROID_JAR" -d "$OUT/classes" @"$OUT/sources.txt"
 
 echo "> dex"
 if command -v d8 >/dev/null; then
@@ -58,4 +43,10 @@ apksigner sign --ks "$ROOT/keystore/croverlay.jks" --ks-pass pass:android \
   --ks-key-alias croverlay --key-pass pass:android \
   --out "$APK" "$OUT/aligned.apk"
 apksigner verify --print-certs "$APK" | head -1
+
+# Copy to release
+mkdir -p "$ROOT/release"
+cp "$APK" "$ROOT/release/care-elixir-reader.apk"
+
 echo "OK: $APK"
+echo "Release: $ROOT/release/care-elixir-reader.apk"

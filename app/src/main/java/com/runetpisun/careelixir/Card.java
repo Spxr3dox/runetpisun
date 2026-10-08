@@ -1,20 +1,17 @@
-package com.runetpisun.croverlay;
+package com.runetpisun.careelixir;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-/** Card catalogue: name, short label for the overlay, elixir cost, champion ability cost. */
 public final class Card {
-    /** Mirror costs "previous card + 1", resolved by the tracker. */
     public static final int COST_MIRROR = -1;
 
     public final String id;
     public final String name;
     public final String shortName;
     public final int cost;
-    /** Champion ability cost, 0 for non-champions. */
     public final int abilityCost;
 
     private Card(String name, String shortName, int cost, int abilityCost) {
@@ -25,13 +22,16 @@ public final class Card {
         this.abilityCost = abilityCost;
     }
 
-    public boolean isChampion() {
-        return abilityCost > 0;
+    public boolean isChampion() { return abilityCost > 0; }
+    public boolean isMirror() { return cost == COST_MIRROR; }
+
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof Card && id.equals(((Card) o).id);
     }
 
-    public boolean isMirror() {
-        return cost == COST_MIRROR;
-    }
+    @Override
+    public int hashCode() { return id.hashCode(); }
 
     private static final List<Card> ALL = new ArrayList<>();
 
@@ -44,13 +44,12 @@ public final class Card {
     }
 
     static {
-        // 1
         c("Skeletons", "Skelly", 1);
         c("Ice Spirit", "IceSp", 1);
         c("Fire Spirit", "FireSp", 1);
         c("Electro Spirit", "ElSp", 1);
         c("Heal Spirit", "HealSp", 1);
-        // 2
+
         c("Goblins", "Gobs", 2);
         c("Spear Goblins", "SpGob", 2);
         c("Bomber", "Bomber", 2);
@@ -65,7 +64,7 @@ public final class Card {
         c("Barbarian Barrel", "BarbBl", 2);
         c("Rage", "Rage", 2);
         c("Goblin Curse", "Curse", 2);
-        // 3
+
         c("Knight", "Knight", 3);
         c("Archers", "Arch", 3);
         c("Minions", "Minion", 3);
@@ -93,7 +92,7 @@ public final class Card {
         c("Earthquake", "Quake", 3);
         c("Royal Delivery", "RDeliv", 3);
         c("Void", "Void", 3);
-        // 4
+
         c("Valkyrie", "Valk", 4);
         c("Musketeer", "Musket", 4);
         c("Baby Dragon", "BabyD", 4);
@@ -127,7 +126,7 @@ public final class Card {
         c("Fireball", "Fball", 4);
         c("Freeze", "Freeze", 4);
         c("Poison", "Poison", 4);
-        // 5
+
         c("Giant", "Giant", 5);
         c("Balloon", "Loon", 5);
         c("Witch", "Witch", 5);
@@ -149,7 +148,7 @@ public final class Card {
         c("Inferno Tower", "InfTwr", 5);
         c("Goblin Hut", "GobHut", 5);
         c("Graveyard", "Grave", 5);
-        // 6
+
         c("Giant Skeleton", "GSkel", 6);
         c("Royal Giant", "RG", 6);
         c("Sparky", "Sparky", 6);
@@ -161,44 +160,35 @@ public final class Card {
         c("Elixir Collector", "Pump", 6);
         c("Lightning", "Light", 6);
         c("Rocket", "Rocket", 6);
-        // 7
+
         c("P.E.K.K.A", "PEKKA", 7);
         c("Lava Hound", "Lava", 7);
         c("Mega Knight", "MK", 7);
         c("Royal Recruits", "Recrts", 7);
         c("Electro Giant", "EGiant", 7);
-        // 8+
+
         c("Golem", "Golem", 8);
         c("Three Musketeers", "3M", 9);
-        // special
         c("Mirror", "Mirror", COST_MIRROR);
 
         Collections.sort(ALL, new Comparator<Card>() {
             @Override
-            public int compare(Card a, Card b) {
-                return a.name.compareToIgnoreCase(b.name);
-            }
+            public int compare(Card a, Card b) { return a.name.compareToIgnoreCase(b.name); }
         });
     }
 
-    public static List<Card> all() {
-        return Collections.unmodifiableList(ALL);
-    }
+    public static List<Card> all() { return Collections.unmodifiableList(ALL); }
 
     public static Card byId(String id) {
-        for (Card card : ALL) {
-            if (card.id.equals(id)) return card;
-        }
+        for (Card c : ALL) if (c.id.equals(id)) return c;
         return null;
     }
 
-    /** Cards for a picker tab: 0 = special (Mirror), 8 = cost 8 and above. */
     public static List<Card> withCost(int cost) {
         List<Card> out = new ArrayList<>();
-        for (Card card : ALL) {
-            if (cost == 0 ? card.isMirror() : (cost >= 8 ? card.cost >= 8 : card.cost == cost)) {
-                out.add(card);
-            }
+        for (Card c : ALL) {
+            if (cost == 0 ? c.isMirror() : (cost >= 8 ? c.cost >= 8 : c.cost == cost))
+                out.add(c);
         }
         return out;
     }

@@ -1,4 +1,4 @@
-package com.runetpisun.croverlay;
+package com.runetpisun.careelixir;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -22,28 +22,26 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/** Builds and drives the floating overlay window (all views are created in code). */
-final class OverlayController {
+public final class OverlayController {
     private static final long TICK_MS = 100;
-    private static final int COLOR_PANEL = 0xD9101820;
-    private static final int COLOR_ELIXIR = 0xFFE040FB;
-    private static final int COLOR_HAND = 0xFF2E7D32;
-    private static final int COLOR_NEXT = 0xFFF9A825;
-    private static final int COLOR_QUEUE = 0xFF455A64;
-    private static final int COLOR_UNKNOWN = 0xFF1E272C;
-    private static final int COLOR_BUTTON = 0xFF37474F;
+    private static final int BG = 0xD9101820;
+    private static final int ELIXIR_COLOR = 0xFFE040FB;
+    private static final int HAND = 0xFF2E7D32;
+    private static final int NEXT = 0xFFF9A825;
+    private static final int QUEUE = 0xFF455A64;
+    private static final int UNKNOWN = 0xFF1E272C;
+    private static final int BTN = 0xFF37474F;
+    private static final int AUTO_BADGE = 0xFF00BCD4;
 
     private final Context ctx;
     private final WindowManager wm;
     private final SharedPreferences prefs;
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final Tracker tracker = new Tracker();
+    private final Tracker tracker;
+    private final ScreenAnalyzer analyzer;
 
     private WindowManager.LayoutParams params;
     private View root;
@@ -54,15 +52,10 @@ final class OverlayController {
     private TextView playPauseBtn;
     private TextView undoBtn;
     private TextView abilityBtn;
-    private TextView cycleText;
-    private TextView insightsText;
     private TextView pumpBtn;
-    private TextView oppLevelText;
+    private TextView cycleText;
+    private TextView autoStatusText;
     private LinearLayout battlePanel;
-    private final AppSettings settings;
-    private final Stats stats;
-    private List<Card> myDeck = new ArrayList<>();
-    private AppLevels levels;
     private ElixirBar elixirBar;
     private final TextView[] slots = new TextView[Tracker.DECK_SIZE];
     private LinearLayout picker;
@@ -81,28 +74,46 @@ final class OverlayController {
         }
     };
 
-    OverlayController(Context ctx) {
+    public OverlayController(Context ctx) {
         this.ctx = ctx;
         this.wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
         this.prefs = ctx.getSharedPreferences("overlay", Context.MODE_PRIVATE);
-        this.settings = new AppSettings(ctx);
-        this.stats = loadStats(ctx);
+        this.tracker = ElixirBridge.getTracker();
+        this.analyzer = ElixirBridge.getAnalyzer();
+        setupAnalyzer();
     }
 
-    private static Stats loadStats(Context ctx) {
-        try (InputStreamReader in = new InputStreamReader(ctx.getAssets().open("stats.tsv"), StandardCharsets.UTF_8)) {
-            return Stats.parse(in);
-        } catch (Exception e) {
-            return null;
-        }
+    private void setupAnalyzer() {
+        analyzer.buildCardProfiles();
+        analyzer.setListener(new ScreenAnalyzer.DetectionListener() {
+            @Override
+            public void onCardDetected(final Card card, float confidence) {
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        tracker.play(card, SystemClock.elapsedRealtime());
+                        refreshAll();
+                    }
+                });
+            }
+
+            @Override
+            public void onDeploymentDetected(final int elixirCost) {
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        tracker.adjust(-elixirCost, SystemClock.elapsedRealtime());
+                        refreshAll();
+                    }
+                });
+            }
+        });
     }
 
     void show() {
         if (shown) return;
         if (root == null) build();
-        reloadSettings();
         wm.addView(root, params);
-        syncApi();
         shown = true;
         refreshAll();
         handler.post(ticker);
@@ -111,21 +122,18 @@ final class OverlayController {
     void hide() {
         if (!shown) return;
         handler.removeCallbacks(ticker);
-        // The clock keeps counting in the tracker: tick() uses real time deltas.
         wm.removeViewImmediate(root);
         shown = false;
     }
 
-    // ---------------------------------------------------------------- build
-
     private void build() {
         params = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                PixelFormat.TRANSLUCENT);
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT);
         params.gravity = Gravity.TOP | Gravity.START;
         params.x = prefs.getInt("x", dp(8));
         params.y = prefs.getInt("y", dp(140));
@@ -137,38 +145,39 @@ final class OverlayController {
 
         pill = text("", 16, Color.WHITE);
         pill.setTypeface(Typeface.DEFAULT_BOLD);
-        pill.setBackground(rounded(COLOR_PANEL, 18));
+        pill.setBackground(rounded(BG, 18));
         pill.setPadding(dp(12), dp(6), dp(12), dp(6));
         pill.setOnTouchListener(new DragListener(new Runnable() {
             @Override
-            public void run() {
-                setCollapsed(false);
-            }
+            public void run() { setCollapsed(false); }
         }));
         container.addView(pill);
 
         panel = new LinearLayout(ctx);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setBackground(rounded(COLOR_PANEL, 12));
+        panel.setBackground(rounded(BG, 12));
         panel.setPadding(dp(6), dp(4), dp(6), dp(6));
         container.addView(panel, new LinearLayout.LayoutParams(dp(268), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         panel.addView(buildHeader());
+
+        autoStatusText = text("", 10, AUTO_BADGE);
+        autoStatusText.setPadding(dp(2), dp(2), dp(2), dp(2));
+        panel.addView(autoStatusText);
+
         battlePanel = buildBattlePanel();
         battlePanel.setVisibility(View.GONE);
         panel.addView(battlePanel);
+
         elixirBar = new ElixirBar(ctx);
-        panel.addView(elixirBar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(10)));
+        panel.addView(elixirBar, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(10)));
         panel.addView(buildDeckRow(0));
         panel.addView(buildDeckRow(4));
 
         cycleText = text("", 11, 0xFFCFD8DC);
         cycleText.setPadding(dp(2), dp(3), dp(2), dp(3));
         panel.addView(cycleText);
-
-        insightsText = text("", 11, 0xFFFFE082);
-        insightsText.setPadding(dp(2), 0, dp(2), dp(3));
-        panel.addView(insightsText);
 
         panel.addView(buildActionRow());
         picker = buildPicker();
@@ -187,7 +196,7 @@ final class OverlayController {
         handle.setOnTouchListener(new DragListener(null));
         row.addView(handle);
 
-        elixirText = text("5.0", 22, COLOR_ELIXIR);
+        elixirText = text("5.0", 22, ELIXIR_COLOR);
         elixirText.setTypeface(Typeface.DEFAULT_BOLD);
         elixirText.setOnTouchListener(new DragListener(null));
         row.addView(elixirText, new LinearLayout.LayoutParams(dp(54), LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -203,11 +212,13 @@ final class OverlayController {
         clockText.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
             public boolean onLongClick(View v) {
-                battlePanel.setVisibility(battlePanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+                battlePanel.setVisibility(
+                    battlePanel.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
                 return true;
             }
         });
-        row.addView(clockText, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        row.addView(clockText, new LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
         playPauseBtn = button("▶", new View.OnClickListener() {
             @Override
@@ -218,6 +229,7 @@ final class OverlayController {
             }
         });
         row.addView(playPauseBtn);
+
         undoBtn = button("↶", new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -226,26 +238,24 @@ final class OverlayController {
             }
         });
         row.addView(undoBtn);
+
         TextView reset = button("⟲", null);
-        // Long press so a stray tap mid-battle does not wipe the tracked deck.
         reset.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
             public boolean onLongClick(View v) {
                 tracker.reset();
-                // The battle that just ended is now in the battle log: refresh levels.
-                syncApi();
                 showPicker(false);
                 refreshAll();
                 return true;
             }
         });
         row.addView(reset);
+
         row.addView(button("–", new View.OnClickListener() {
             @Override
-            public void onClick(View v) {
-                setCollapsed(true);
-            }
+            public void onClick(View v) { setCollapsed(true); }
         }));
+
         return row;
     }
 
@@ -258,9 +268,7 @@ final class OverlayController {
             slot.setMaxLines(2);
             slot.setOnClickListener(new View.OnClickListener() {
                 @Override
-                public void onClick(View v) {
-                    onSlotTap(index);
-                }
+                public void onClick(View v) { onSlotTap(index); }
             });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(40), 1);
             lp.setMargins(dp(2), dp(3), dp(2), 0);
@@ -314,12 +322,11 @@ final class OverlayController {
         return row;
     }
 
-    /** Long-press on the clock: sync with the in-game timer and set the opponent's card level. */
     private LinearLayout buildBattlePanel() {
         LinearLayout box = new LinearLayout(ctx);
         box.setOrientation(LinearLayout.VERTICAL);
 
-        TextView hint = text("Синхронізуй з таймером гри (якщо ▶ натиснуто із запізненням — «+»):", 10, 0xFFB0BEC5);
+        TextView hint = text("Синхронізуй з таймером гри:", 10, 0xFFB0BEC5);
         box.addView(hint);
         LinearLayout time = hRow();
         long[] shifts = {-5_000, -1_000, 1_000, 5_000};
@@ -335,28 +342,6 @@ final class OverlayController {
             }), weighted());
         }
         box.addView(time);
-
-        LinearLayout level = hRow();
-        level.setGravity(Gravity.CENTER_VERTICAL);
-        oppLevelText = text("", 12, Color.WHITE);
-        level.addView(oppLevelText, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 2));
-        level.addView(button("−", new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                settings.setOppLevel(settings.oppLevel() - 1);
-                reloadSettings();
-                refreshAll();
-            }
-        }), weighted());
-        level.addView(button("+", new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                settings.setOppLevel(settings.oppLevel() + 1);
-                reloadSettings();
-                refreshAll();
-            }
-        }), weighted());
-        box.addView(level);
         return box;
     }
 
@@ -386,13 +371,14 @@ final class OverlayController {
         pickerGrid = new LinearLayout(ctx);
         pickerGrid.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(pickerGrid);
-        box.addView(scroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(150)));
+        box.addView(scroll, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(150)));
         return box;
     }
 
     private void fillPicker() {
         for (int i = 0; i < tabs.length; i++) {
-            tabs[i].setBackground(rounded(i == pickerTab ? COLOR_ELIXIR : COLOR_BUTTON, 6));
+            tabs[i].setBackground(rounded(i == pickerTab ? ELIXIR_COLOR : BTN, 6));
         }
         pickerGrid.removeAllViews();
         List<Card> cards = Card.withCost(pickerTab);
@@ -415,13 +401,10 @@ final class OverlayController {
             b.setMaxLines(2);
             row.addView(b, weighted());
         }
-        // Pad the last row so buttons keep equal width.
         while (row != null && row.getChildCount() < 3) {
             row.addView(new View(ctx), weighted());
         }
     }
-
-    // ---------------------------------------------------------------- actions
 
     private void onSlotTap(int index) {
         List<Card> deck = tracker.getDeck();
@@ -451,30 +434,32 @@ final class OverlayController {
         panel.setVisibility(collapsed ? View.GONE : View.VISIBLE);
     }
 
-    // ---------------------------------------------------------------- refresh
-
     private void refreshLive() {
         double elixir = tracker.getElixir();
         String value = String.format(Locale.US, "%.1f", elixir);
         int mult = tracker.getMultiplier();
-        String insights = buildInsights();
-        boolean surpriseReady = insights.matches("(?s).*🛢[^\n]*✅.*");
-        pill.setText("💧 " + value + (mult > 1 ? "  x" + mult : "") + (surpriseReady ? "  🛢!" : ""));
+        pill.setText("💧 " + value + (mult > 1 ? "  x" + mult : ""));
         if (collapsed) return;
         elixirText.setText(value);
-        elixirText.setTextColor(elixir >= Tracker.MAX_ELIXIR ? 0xFFFF5252 : COLOR_ELIXIR);
+        elixirText.setTextColor(elixir >= Tracker.MAX_ELIXIR ? 0xFFFF5252 : ELIXIR_COLOR);
         elixirBar.setValue(elixir);
         clockText.setText(clockLabel() + "  x" + mult + (tracker.isAutoMultiplier() ? "" : "!"));
-        if (!insights.contentEquals(insightsText.getText())) {
-            insightsText.setText(insights);
-            insightsText.setVisibility(insights.isEmpty() ? View.GONE : View.VISIBLE);
+
+        CaptureService cs = CaptureService.getInstance();
+        boolean capturing = cs != null && cs.isCapturing();
+        String statusMsg = capturing ? "👁 Авто-детект ON" : "⚠ Захоплення вимкнено";
+        if (!statusMsg.contentEquals(autoStatusText.getText())) {
+            autoStatusText.setText(statusMsg);
+            autoStatusText.setTextColor(capturing ? AUTO_BADGE : 0xFFFF5252);
         }
     }
 
     private String clockLabel() {
         long elapsed = tracker.getElapsedMs();
         boolean overtime = elapsed >= Tracker.REGULAR_MS;
-        long remaining = overtime ? Math.max(0, Tracker.REGULAR_MS + 120_000 - elapsed) : Tracker.REGULAR_MS - elapsed;
+        long remaining = overtime
+            ? Math.max(0, Tracker.REGULAR_MS + 120_000 - elapsed)
+            : Tracker.REGULAR_MS - elapsed;
         long sec = (remaining + 999) / 1000;
         return (overtime ? "OT " : "") + String.format(Locale.US, "%d:%02d", sec / 60, sec % 60);
     }
@@ -491,7 +476,7 @@ final class OverlayController {
             TextView slot = slots[i];
             if (i >= deck.size()) {
                 slot.setText("?");
-                slot.setBackground(rounded(COLOR_UNKNOWN, 6));
+                slot.setBackground(rounded(UNKNOWN, 6));
                 continue;
             }
             Card card = deck.get(i);
@@ -499,7 +484,7 @@ final class OverlayController {
             String cost = card.isMirror() ? "M" : String.valueOf(card.cost);
             String badge = pos == 0 ? "✓" : String.valueOf(pos);
             slot.setText(card.shortName + "\n" + cost + "💧 " + badge);
-            int color = pos == 0 ? COLOR_HAND : (pos == 1 ? COLOR_NEXT : COLOR_QUEUE);
+            int color = pos == 0 ? HAND : (pos == 1 ? NEXT : QUEUE);
             slot.setBackground(rounded(color, 6));
         }
 
@@ -515,43 +500,15 @@ final class OverlayController {
         }
         sb.append("   |  карт: ").append(deck.size()).append("/8");
         if (tracker.getLeaked() >= 0.1) {
-            sb.append(String.format(Locale.US, "\nВтратив на 10💧: %.1f", tracker.getLeaked()));
+            sb.append(String.format(Locale.US, "\nВтратив: %.1f💧", tracker.getLeaked()));
         }
         cycleText.setText(sb.toString());
         pumpBtn.setVisibility(tracker.hasActivePump() ? View.VISIBLE : View.GONE);
-        oppLevelText.setText("Рівень карт суперника: " + settings.oppLevel());
     }
-
-    private void reloadSettings() {
-        myDeck = settings.myDeck();
-        levels = settings.levels();
-    }
-
-    private void syncApi() {
-        ApiSync.syncAsync(ctx, false, new ApiSync.Callback() {
-            @Override
-            public void done(boolean ok, String message) {
-                reloadSettings();
-                if (shown) refreshAll();
-            }
-        });
-    }
-
-    private String buildInsights() {
-        List<String> lines = new Insights(tracker, stats, myDeck, levels).lines();
-        StringBuilder sb = new StringBuilder();
-        for (String line : lines) {
-            if (sb.length() > 0) sb.append('\n');
-            sb.append(line);
-        }
-        return sb.toString();
-    }
-
-    // ---------------------------------------------------------------- helpers
 
     private int dp(float v) {
-        return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v,
-                ctx.getResources().getDisplayMetrics()));
+        return Math.round(TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, v, ctx.getResources().getDisplayMetrics()));
     }
 
     private TextView text(String s, float sp, int color) {
@@ -567,17 +524,18 @@ final class OverlayController {
         b.setGravity(Gravity.CENTER);
         b.setTypeface(Typeface.DEFAULT_BOLD);
         b.setPadding(dp(8), dp(5), dp(8), dp(5));
-        b.setBackground(rounded(COLOR_BUTTON, 6));
+        b.setBackground(rounded(BTN, 6));
         if (onClick != null) b.setOnClickListener(onClick);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         lp.setMargins(dp(2), dp(2), dp(2), dp(2));
         b.setLayoutParams(lp);
         return b;
     }
 
     private LinearLayout.LayoutParams weighted() {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
         lp.setMargins(dp(2), dp(2), dp(2), dp(2));
         return lp;
     }
@@ -595,7 +553,6 @@ final class OverlayController {
         return d;
     }
 
-    /** Moves the overlay window; a touch without movement counts as a tap. */
     private final class DragListener implements View.OnTouchListener {
         private final Runnable onTap;
         private final int slop = ViewConfiguration.get(ctx).getScaledTouchSlop();
@@ -603,23 +560,18 @@ final class OverlayController {
         private int startX, startY;
         private boolean dragging;
 
-        DragListener(Runnable onTap) {
-            this.onTap = onTap;
-        }
+        DragListener(Runnable onTap) { this.onTap = onTap; }
 
         @Override
         public boolean onTouch(View v, MotionEvent e) {
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
-                    downX = e.getRawX();
-                    downY = e.getRawY();
-                    startX = params.x;
-                    startY = params.y;
+                    downX = e.getRawX(); downY = e.getRawY();
+                    startX = params.x; startY = params.y;
                     dragging = false;
                     return true;
                 case MotionEvent.ACTION_MOVE:
-                    float dx = e.getRawX() - downX;
-                    float dy = e.getRawY() - downY;
+                    float dx = e.getRawX() - downX, dy = e.getRawY() - downY;
                     if (!dragging && Math.hypot(dx, dy) > slop) dragging = true;
                     if (dragging) {
                         params.x = Math.max(0, startX + Math.round(dx));
@@ -640,7 +592,6 @@ final class OverlayController {
         }
     }
 
-    /** 10-segment elixir bar with a partially filled current segment. */
     private static final class ElixirBar extends View {
         private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint empty = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -649,7 +600,7 @@ final class OverlayController {
 
         ElixirBar(Context ctx) {
             super(ctx);
-            fill.setColor(COLOR_ELIXIR);
+            fill.setColor(ELIXIR_COLOR);
             empty.setColor(0xFF37253D);
         }
 

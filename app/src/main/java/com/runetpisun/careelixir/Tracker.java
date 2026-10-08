@@ -1,27 +1,18 @@
-package com.runetpisun.croverlay;
+package com.runetpisun.careelixir;
 
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Opponent state model: elixir regeneration, discovered deck and card cycle.
- * Pure Java (no Android deps) so it can be unit-tested on the JVM.
- *
- * Cycle model: deck = 8 cards, 4 in hand + queue of 4. A played card goes to the
- * back of the queue and the front of the queue enters the hand. So after k plays the
- * queue is (4 - min(k,4)) unknown starting cards followed by the last min(k,4) plays.
- */
 public final class Tracker {
     public static final double MAX_ELIXIR = 10.0;
     public static final double START_ELIXIR = 5.0;
-    /** Seconds per elixir at 1x. */
     public static final double SECONDS_PER_ELIXIR = 2.8;
     public static final long REGULAR_MS = 180_000;
     public static final long DOUBLE_FROM_MS = 120_000;
     public static final long TRIPLE_FROM_MS = 240_000;
     public static final int DECK_SIZE = 8;
     public static final int QUEUE_SIZE = 4;
-    /** Elixir Collector (RoyaleAPI data): 1 elixir every 9 s for 65 s after a 1 s deploy, +1 on death. */
+
     static final long PUMP_DEPLOY_MS = 1_000;
     static final long PUMP_INTERVAL_MS = 9_000;
     static final long PUMP_LIFE_MS = 65_000;
@@ -34,7 +25,6 @@ public final class Tracker {
         final Card card;
         final double appliedDelta;
         final boolean addedToDeck;
-        /** Collector started by this play, so undo can remove it. */
         Pump pump;
 
         Action(Kind kind, Card card, double appliedDelta, boolean addedToDeck) {
@@ -45,17 +35,13 @@ public final class Tracker {
         }
     }
 
-    /** A live opponent Elixir Collector. */
     private static final class Pump {
         long placedAtMs;
         int produced;
         boolean dead;
-        /** Elixir actually added by this pump (after the 10 cap), for undo. */
         double applied;
 
-        Pump(long placedAtMs) {
-            this.placedAtMs = placedAtMs;
-        }
+        Pump(long placedAtMs) { this.placedAtMs = placedAtMs; }
     }
 
     private final List<Action> actions = new ArrayList<>();
@@ -66,7 +52,6 @@ public final class Tracker {
     private long elapsedMs;
     private long lastTickMs;
     private double elixir = START_ELIXIR;
-    /** 0 = auto by battle time, otherwise forced 1/2/3. */
     private int multiplierOverride;
 
     public void reset() {
@@ -91,9 +76,7 @@ public final class Tracker {
         running = false;
     }
 
-    public boolean isRunning() {
-        return running;
-    }
+    public boolean isRunning() { return running; }
 
     public void tick(long nowMs) {
         if (!running) return;
@@ -129,7 +112,6 @@ public final class Tracker {
         p.applied += gain(1);
     }
 
-    /** Adds elixir with the cap, counting overflow as leaked; returns what was applied. */
     private double gain(double amount) {
         double before = elixir;
         double next = elixir + amount;
@@ -138,49 +120,33 @@ public final class Tracker {
         return elixir - before;
     }
 
-    /**
-     * Shifts the battle clock to match the in-game timer. A positive delta means the battle
-     * started earlier than we thought, so the opponent also gained that much extra elixir.
-     */
     public void shiftClock(long deltaMs, long nowMs) {
         tick(nowMs);
         long target = Math.max(0, elapsedMs + deltaMs);
         long d = target - elapsedMs;
-        if (d > 0) regen(d); else elixir = clamp(elixir + d / 1000.0 * getMultiplier() / SECONDS_PER_ELIXIR);
+        if (d > 0) regen(d);
+        else elixir = clamp(elixir + d / 1000.0 * getMultiplier() / SECONDS_PER_ELIXIR);
         elapsedMs = target;
-        // Collectors were placed at a real moment: keep their age unchanged.
         for (Pump p : pumps) p.placedAtMs += d;
         runPumps();
     }
 
-    /** Elixir the opponent wasted while sitting at 10. */
-    public double getLeaked() {
-        return leaked;
-    }
+    public double getLeaked() { return leaked; }
 
     public boolean hasActivePump() {
         for (Pump p : pumps) if (!p.dead) return true;
         return false;
     }
 
-    /** The opponent's collector was destroyed early: it pays out its death elixir and stops. */
     public void destroyPump(long nowMs) {
         tick(nowMs);
         for (Pump p : pumps) {
-            if (!p.dead) {
-                killPump(p);
-                return;
-            }
+            if (!p.dead) { killPump(p); return; }
         }
     }
 
-    public double getElixir() {
-        return elixir;
-    }
-
-    public long getElapsedMs() {
-        return elapsedMs;
-    }
+    public double getElixir() { return elixir; }
+    public long getElapsedMs() { return elapsedMs; }
 
     public int getMultiplier() {
         if (multiplierOverride != 0) return multiplierOverride;
@@ -189,16 +155,12 @@ public final class Tracker {
         return 1;
     }
 
-    public boolean isAutoMultiplier() {
-        return multiplierOverride == 0;
-    }
+    public boolean isAutoMultiplier() { return multiplierOverride == 0; }
 
-    /** auto -> x1 -> x2 -> x3 -> auto. */
     public void cycleMultiplier() {
         multiplierOverride = (multiplierOverride + 1) % 4;
     }
 
-    /** Opponent played a card. Starts the clock if it was not running. */
     public void play(Card card, long nowMs) {
         start(nowMs);
         tick(nowMs);
@@ -216,7 +178,6 @@ public final class Tracker {
         actions.add(action);
     }
 
-    /** Elixir the card costs right now (Mirror = last played card + 1). */
     public int costOf(Card card) {
         if (!card.isMirror()) return card.cost;
         for (int i = actions.size() - 1; i >= 0; i--) {
@@ -231,15 +192,12 @@ public final class Tracker {
         actions.add(new Action(Kind.ABILITY, champion, applyDelta(-champion.abilityCost), false));
     }
 
-    /** Manual correction, e.g. Elixir Collector output or a missed tick. */
     public void adjust(double delta, long nowMs) {
         tick(nowMs);
         actions.add(new Action(Kind.ADJUST, null, applyDelta(delta), false));
     }
 
-    public boolean canUndo() {
-        return !actions.isEmpty();
-    }
+    public boolean canUndo() { return !actions.isEmpty(); }
 
     public void undo(long nowMs) {
         if (actions.isEmpty()) return;
@@ -255,8 +213,6 @@ public final class Tracker {
 
     private double applyDelta(double delta) {
         double before = elixir;
-        // Going below zero means we under-counted: the opponent had at least the cost,
-        // so clamping to 0 self-calibrates the counter.
         elixir = clamp(elixir + delta);
         return elixir - before;
     }
@@ -265,11 +221,8 @@ public final class Tracker {
         return Math.max(0, Math.min(MAX_ELIXIR, v));
     }
 
-    public List<Card> getDeck() {
-        return new ArrayList<>(deck);
-    }
+    public List<Card> getDeck() { return new ArrayList<>(deck); }
 
-    /** Most recent card the opponent played, or null. */
     public Card getLastPlayed() {
         for (int i = actions.size() - 1; i >= 0; i--) {
             if (actions.get(i).kind == Kind.PLAY) return actions.get(i).card;
@@ -283,10 +236,6 @@ public final class Tracker {
         return n;
     }
 
-    /**
-     * Queue in return order: index 0 is the card that enters the hand on the next play.
-     * Null entries are still-unknown starting cards.
-     */
     public Card[] getQueue() {
         List<Card> recent = new ArrayList<>();
         for (int i = actions.size() - 1; i >= 0 && recent.size() < QUEUE_SIZE; i--) {
@@ -299,7 +248,6 @@ public final class Tracker {
         return queue;
     }
 
-    /** 0 = in hand (or unknown), 1..4 = position in queue (1 = next to return). */
     public int queuePosition(Card card) {
         Card[] queue = getQueue();
         for (int i = 0; i < queue.length; i++) {
@@ -308,14 +256,12 @@ public final class Tracker {
         return 0;
     }
 
-    /** Known cards currently in the opponent's hand. */
     public List<Card> getHand() {
         List<Card> hand = new ArrayList<>();
         for (Card c : deck) if (queuePosition(c) == 0) hand.add(c);
         return hand;
     }
 
-    /** First champion in the discovered deck, or null. */
     public Card getChampion() {
         for (Card c : deck) if (c.isChampion()) return c;
         return null;
