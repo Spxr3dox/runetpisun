@@ -1,4 +1,4 @@
-# Care Elixir Reader
+# CR Elixir Reader
 
 Android overlay app for Clash Royale that automatically detects opponent's card plays
 via screen capture and tracks their elixir in real time.

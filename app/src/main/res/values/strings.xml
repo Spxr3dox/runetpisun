@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Care Elixir Reader</string>
-    <string name="service_label">Care Elixir Reader (оверлей)</string>
+    <string name="app_name">CR Elixir Reader</string>
+    <string name="service_label">CR Elixir Reader (оверлей)</string>
     <string name="service_description">Автоматично відстежує карти суперника в Clash Royale через захоплення екрану і рахує його еліксир.</string>
     <string name="status_on">✅ Сервіс увімкнено</string>
     <string name="status_off">❌ Сервіс вимкнено</string>
@@ -18,7 +18,7 @@
     <string name="btn_sync">Зберегти і синхронізувати</string>
     <string name="syncing">Синхронізація…</string>
     <string name="api_missing">Впиши тег і ключ</string>
-    <string name="capture_notification_title">Care Elixir Reader</string>
+    <string name="capture_notification_title">CR Elixir Reader</string>
     <string name="capture_notification_text">Захоплення екрану активне</string>
     <string name="channel_name">Захоплення екрану</string>
 </resources>
